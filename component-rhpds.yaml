@@ -4,8 +4,8 @@ metadata:
   name: provisioning-data
   description: Provisioning data from demo.redhat.com
   labels:
-    ocp-apps-domain: {{ ocp_apps_domain }}
-    guid: {{ guid }}
+    ocp-apps-domain: apps.cluster-kql8t.dyn.redhatworkshops.io
+    guid: kql8t-1
 spec:
   type: service
   lifecycle: production
