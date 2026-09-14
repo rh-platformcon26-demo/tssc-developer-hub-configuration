@@ -1,0 +1,131 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: quarkus-stssc-pipeline-update-template
+  title: Update Application to Trusted Software Supply Chain Pipeline (GitLab MR)
+  description: "Create a GitLab merge request that updates an existing application to use a Trusted Software Supply Chain (Trusted Application Pipeline): updates the Tekton pipeline referenced in .tekton/on-push.yaml and the Dockerfile base image"
+  tags:
+    - gitlab
+    - tekton
+    - sssc
+    - tssc
+    - dockerfile
+    - mr
+    - update
+spec:
+  owner: tssc
+  type: service
+  parameters:
+    - title: Target Repository Information
+      required:
+        - repoOwner
+        - repoName
+      properties:
+        repoHost:
+          title: Source Repo
+          type: string
+          default: Gitlab
+          enum:
+            - Gitlab
+        repoOwner:
+          title: Repo Owner
+          type: string
+          description: Your SCM host organization/group where the target repository lives
+          default: development
+        repoName:
+          title: Repository Name
+          type: string
+          description: Name of the existing repository (project) to update
+        targetBranch:
+          title: Target Branch
+          type: string
+          description: Branch the merge request will target
+          default: master
+        imageOrg:
+          title: Image Organization
+          type: string
+          description: Quay organization used in the output-image parameter of .tekton/on-push.yaml
+          default: tssc
+    - title: Pipeline Reference Update (.tekton/on-push.yaml)
+      description: Select the Trusted Software Supply Chain pipeline to reference
+      required:
+        - pipelineName
+      properties:
+        pipelineName:
+          title: Trusted Software Supply Chain Pipeline
+          type: string
+          description: Pipeline referenced by the pipelinesascode.tekton.dev/pipeline annotation and spec.pipelineRef.name in .tekton/on-push.yaml (only the pipeline reference is updated, task references stay unchanged)
+          default: maven-build-ci
+          enum:
+            - maven-build-ci
+          ui:autofocus: true
+    - title: Dockerfile Update
+      required:
+        - baseImage
+      properties:
+        baseImage:
+          title: Docker Base Image
+          type: string
+          description: New base image used in the FROM instruction of the Dockerfile
+          default: registry.access.redhat.com/ubi8/openjdk-21:1.21
+    - title: Merge Request Options
+      properties:
+        sourceBranchName:
+          title: Source Branch Name
+          type: string
+          description: Name of the branch created to host the changes (must not already exist with an open merge request)
+          default: backstage-update-pipeline
+        removeSourceBranch:
+          title: Delete Source Branch After Merge
+          type: boolean
+          description: Automatically delete the source branch once the merge request is merged
+          default: true
+
+  steps:
+    - id: fetch-provision-data
+      name: Fetch Provision Data
+      action: catalog:fetch
+      input:
+        entityRef: component:default/provisioning-data
+
+    - id: template
+      name: Generate Updated Files
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          appName: ${{ parameters.repoName }}
+          imageOrg: ${{ parameters.imageOrg }}
+          gitlabHost: gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}
+          quayHost: quay-${{ steps["fetch-provision-data"].output.entity.metadata.labels["guid"] }}.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}
+          pipelineRefName: ${{ parameters.pipelineName }}
+          pipelineUrl: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/tssc-sample-pipelines/-/raw/main/pipelines/${{ parameters.pipelineName }}.yaml'
+          baseImage: ${{ parameters.baseImage }}
+
+    - id: create-merge-request
+      name: Create GitLab Merge Request
+      action: publish:gitlab:merge-request
+      input:
+        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.repoName }}'
+        title: 'Update application to Trusted Software Supply Chain pipeline for ${{ parameters.repoName }}'
+        description: |-
+          This merge request is generated from the Red Hat Developer Hub software template **quarkus-stssc-pipeline-update-template**.
+
+          This change migrates the application to a Red Hat **Trusted Software Supply Chain** (Trusted Application Pipeline):
+
+          * `.tekton/on-push.yaml`: update the `pipelinesascode.tekton.dev/pipeline` reference to the new Trusted Software Supply Chain pipeline definition.
+          * `Dockerfile`: update the base image used in the `FROM` instruction.
+
+          Pipeline reference:
+          ${{ parameters.pipelineName }} (https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/tssc-sample-pipelines/-/raw/main/pipelines/${{ parameters.pipelineName }}.yaml)
+
+          Docker base image:
+          ${{ parameters.baseImage }}
+        branchName: ${{ parameters.sourceBranchName }}
+        targetBranchName: ${{ parameters.targetBranch }}
+        removeSourceBranch: ${{ parameters.removeSourceBranch }}
+
+  output:
+    links:
+      - title: Open Merge Request
+        url: ${{ steps['create-merge-request'].output.mergeRequestUrl }}
