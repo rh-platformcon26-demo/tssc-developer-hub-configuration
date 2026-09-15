@@ -40,7 +40,7 @@ spec:
           title: Target Branch
           type: string
           description: Branch the merge request will target
-          default: master
+          default: main
         imageOrg:
           title: Image Organization
           type: string
@@ -67,14 +67,14 @@ spec:
           title: Docker Base Image
           type: string
           description: New base image used in the FROM instruction of the Dockerfile
-          default: registry.access.redhat.com/ubi8/openjdk-21:1.21
+          default: registry.access.redhat.com/hi/openjdk:21
     - title: Merge Request Options
       properties:
         sourceBranchName:
-          title: Source Branch Name
+          title: Target Branch Name
           type: string
-          description: Name of the branch created to host the changes (must not already exist with an open merge request)
-          default: backstage-update-pipeline
+          description: Name of the branch created to host the changes
+          default: tssc-pipeline
         removeSourceBranch:
           title: Delete Source Branch After Merge
           type: boolean
