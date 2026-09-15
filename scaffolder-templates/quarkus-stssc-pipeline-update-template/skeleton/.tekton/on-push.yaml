@@ -5,7 +5,7 @@ metadata:
   annotations: 
     pipelinesascode.tekton.dev/on-cel-expression: |
       body.object_kind == "push"
-    pipelinesascode.tekton.dev/pipeline: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/pipelines/maven-build-ci-simple.yaml"
+    pipelinesascode.tekton.dev/pipeline: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/pipelines/maven-build-ci.yaml"
     pipelinesascode.tekton.dev/task-0: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/init.yaml"
     pipelinesascode.tekton.dev/task-1: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/git-clone.yaml"
     pipelinesascode.tekton.dev/task-2: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/buildah-rhtap.yaml"
