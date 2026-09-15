@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  name: hero-build
+  name: hero-build-tssc
   annotations: 
     pipelinesascode.tekton.dev/on-cel-expression: |
       body.object_kind == "push"
