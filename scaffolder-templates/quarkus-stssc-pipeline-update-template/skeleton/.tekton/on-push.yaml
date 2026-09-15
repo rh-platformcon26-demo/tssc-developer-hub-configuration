@@ -39,6 +39,8 @@ spec:
       value: '{{revision}}'
     - name: event-type
       value: '{{event_type}}'
+    - name: verify-commit
+      value: 'true'
   pipelineRef:
     name: ${{values.pipelineRefName}}
   workspaces:
