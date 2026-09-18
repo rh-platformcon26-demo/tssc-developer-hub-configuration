@@ -57,7 +57,7 @@ spec:
           description: Pipeline referenced by the pipelinesascode.tekton.dev/pipeline annotation and spec.pipelineRef.name in .tekton/on-push.yaml (only the pipeline reference is updated, task references stay unchanged)
           default: maven-build-ci
           enum:
-            - maven-build-ci
+            - maven-build-tssc
           ui:autofocus: true
     - title: Dockerfile Update
       required:
@@ -66,8 +66,8 @@ spec:
         baseImage:
           title: Docker Base Image
           type: string
-          description: New base image used in the FROM instruction of the Dockerfile
-          default: registry.access.redhat.com/hi/openjdk:21
+          description: New base image used
+          default: registry.access.redhat.com/hi/openjdk:21-runtime
     - title: Merge Request Options
       properties:
         sourceBranchName:
