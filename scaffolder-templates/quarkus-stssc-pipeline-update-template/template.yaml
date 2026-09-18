@@ -55,7 +55,7 @@ spec:
           title: Trusted Software Supply Chain Pipeline
           type: string
           description: Pipeline referenced by the pipelinesascode.tekton.dev/pipeline annotation and spec.pipelineRef.name in .tekton/on-push.yaml (only the pipeline reference is updated, task references stay unchanged)
-          default: maven-build-ci
+          default: maven-build-tssc
           enum:
             - maven-build-tssc
           ui:autofocus: true
