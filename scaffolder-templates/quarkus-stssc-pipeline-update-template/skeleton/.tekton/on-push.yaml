@@ -1,7 +1,7 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  name: hero-build-tssc
+  name: "${{values.appName}}-tssc"
   annotations: 
     pipelinesascode.tekton.dev/on-cel-expression: |
       body.object_kind == "push"
@@ -19,6 +19,7 @@ metadata:
     pipelinesascode.tekton.dev/task-10: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/upload-sbom-to-trustification.yaml"
     pipelinesascode.tekton.dev/task-11: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/verify-commit.yaml"
     pipelinesascode.tekton.dev/task-12: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/maven-21.yaml"
+    pipelinesascode.tekton.dev/task-13: "https://gitlab-gitlab.apps.cluster-kql8t.dyn.redhatworkshops.io/rhdh/tssc-sample-pipelines/-/raw/main/tasks/cosign-sign.yaml"
   labels:
     backstage.io/kubernetes-id: "${{values.appName}}"
 spec:
@@ -45,6 +46,8 @@ spec:
       value: https://sso.apps.cluster-kql8t.dyn.redhatworkshops.io/realms/tssc-iam
     - name: verify-commit
       value: 'true'
+    - name: cosign-secret
+      value: 'cosign'
   pipelineRef:
     name: ${{values.pipelineRefName}}
   workspaces:
