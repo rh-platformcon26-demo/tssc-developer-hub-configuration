@@ -39,6 +39,10 @@ spec:
       value: '{{revision}}'
     - name: event-type
       value: '{{event_type}}'
+    - name: certificate-identity
+      value: '{{body.commits[0].author.email}}'
+    - name: oidc-issuer
+      value: https://sso.apps.cluster-kql8t.dyn.redhatworkshops.io/realms/tssc-iam
     - name: verify-commit
       value: 'true'
   pipelineRef:
