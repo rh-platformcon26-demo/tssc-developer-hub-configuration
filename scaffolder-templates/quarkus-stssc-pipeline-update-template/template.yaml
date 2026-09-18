@@ -40,7 +40,7 @@ spec:
           title: Target Branch
           type: string
           description: Branch the merge request will target
-          default: main
+          default: master
         imageOrg:
           title: Image Organization
           type: string
