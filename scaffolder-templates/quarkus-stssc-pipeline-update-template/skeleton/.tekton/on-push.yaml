@@ -67,3 +67,6 @@ spec:
               storage: 1Gi
     - name: maven-settings
       emptyDir: {}
+    - name: maven-cache
+      persistentVolumeClaim:
+        claimName: maven-cache-pvc2
