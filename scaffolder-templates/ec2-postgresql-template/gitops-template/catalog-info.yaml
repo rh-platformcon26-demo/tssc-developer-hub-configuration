@@ -1,4 +1,56 @@
 apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: ${{ values.instanceName }}
+  description: AWS EC2 + PostgreSQL stack provisioned for ${{ values.instanceName }}
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    argocd/app-selector: tssc/gitops=${{ values.instanceName }}
+    backstage.io/kubernetes-id: ${{ values.instanceName }}
+spec:
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.instanceName }}-ec2
+  description: Fedora EC2 instance ${{ values.instanceName }} (${{ values.instanceType }}) in ${{ values.awsRegion }}
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    amazon.com/account-region: ${{ values.awsRegion }}
+    amazon.com/ec2-instance-type: ${{ values.instanceType }}
+    amazon.com/vpc-id: ${{ values.vpcId }}
+    amazon.com/subnet-id: ${{ values.subnetId }}
+    amazon.com/key-name: ${{ values.keyName }}
+spec:
+  type: compute
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+  system: ${{ values.instanceName }}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.instanceName }}-db
+  description: PostgreSQL database ${{ values.postgresDb }} on ${{ values.instanceName }} (localhost only)
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    database/engine: postgresql
+    database/name: ${{ values.postgresDb }}
+    database/user: ${{ values.postgresUser }}
+spec:
+  type: database
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+  system: ${{ values.instanceName }}
+  dependsOn:
+    - resource:default/${{ values.instanceName }}-ec2
+---
+apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
   name: ${{ values.instanceName }}-ec2-pg-gitops
@@ -12,3 +64,4 @@ spec:
   type: gitops
   owner: ${{ values.owner }}
   lifecycle: experimental
+  system: ${{ values.instanceName }}
