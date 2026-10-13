@@ -11,30 +11,30 @@ spec:
     name: ec2-postgresql
   params:
     - name: ANSIBLE_GIT_URL
-      value: ${{ values.ansibleGitUrl }}
+      value: "${{ values.ansibleGitUrl }}"
     - name: ANSIBLE_GIT_REVISION
-      value: ${{ values.ansibleGitRevision }}
+      value: "${{ values.ansibleGitRevision }}"
     - name: AWS_REGION
-      value: ${{ values.awsRegion }}
+      value: "${{ values.awsRegion }}"
     - name: VPC_ID
-      value: ${{ values.vpcId }}
+      value: "${{ values.vpcId }}"
     - name: SUBNET_ID
-      value: ${{ values.subnetId }}
+      value: "${{ values.subnetId }}"
     - name: KEY_NAME
-      value: ${{ values.keyName }}
+      value: "${{ values.keyName }}"
     - name: INSTANCE_NAME
-      value: ${{ values.instanceName }}
+      value: "${{ values.instanceName }}"
     - name: INSTANCE_TYPE
-      value: ${{ values.instanceType }}
+      value: "${{ values.instanceType }}"
     - name: SSH_INGRESS_CIDR
-      value: ${{ values.sshIngressCidr }}
+      value: "${{ values.sshIngressCidr }}"
     - name: POSTGRES_DB
-      value: ${{ values.postgresDb }}
+      value: "${{ values.postgresDb }}"
     - name: POSTGRES_USER
-      value: ${{ values.postgresUser }}
+      value: "${{ values.postgresUser }}"
     - name: POSTGRES_PASSWORD
-      value: ${{ values.postgresPassword }}
+      value: "${{ values.postgresPassword }}"
     - name: AWS_SECRET
-      value: ${{ values.awsSecret }}
+      value: "${{ values.awsSecret }}"
     - name: SSH_SECRET
-      value: ${{ values.sshSecret }}
+      value: "${{ values.sshSecret }}"

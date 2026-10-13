@@ -26,7 +26,6 @@ spec:
         - vpcId
         - subnetId
         - keyName
-        - postgresPassword
         - namespace
         - repoOwner
       properties:
@@ -45,7 +44,7 @@ spec:
         subnetId:
           title: Subnet ID
           type: string
-          description: Existing subnet (prefer public for SSH)
+          description: Existing subnet ID (e.g. subnet-0abc...), not the Name tag
         keyName:
           title: EC2 Key Pair Name
           type: string
@@ -63,9 +62,8 @@ spec:
         postgresPassword:
           title: PostgreSQL Password
           type: string
-          description: Password for the application database user
+          description: Password for the application database user (collected as a scaffolder secret)
           ui:field: Secret
-          ui:widget: password
     - title: Optional Settings
       properties:
         awsRegion:
@@ -126,7 +124,7 @@ spec:
           sshIngressCidr: ${{ parameters.sshIngressCidr }}
           postgresDb: ${{ parameters.postgresDb }}
           postgresUser: ${{ parameters.postgresUser }}
-          postgresPassword: ${{ parameters.postgresPassword }}
+          postgresPassword: ${{ secrets.postgresPassword }}
           awsSecret: ${{ parameters.awsSecret }}
           sshSecret: ${{ parameters.sshSecret }}
           ansibleGitRevision: ${{ parameters.ansibleGitRevision }}
