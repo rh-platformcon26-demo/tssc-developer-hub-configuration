@@ -1,0 +1,14 @@
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.instanceName }}-ec2-pg-gitops
+  description: GitOps manifests to provision EC2 + PostgreSQL for ${{ values.instanceName }}
+  annotations:
+    argocd/app-selector: tssc/gitops=${{ values.instanceName }}
+    backstage.io/kubernetes-id: ${{ values.instanceName }}
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+spec:
+  type: gitops
+  owner: ${{ values.owner }}
+  lifecycle: experimental

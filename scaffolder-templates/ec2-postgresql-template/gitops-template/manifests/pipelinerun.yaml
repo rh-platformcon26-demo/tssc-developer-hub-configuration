@@ -1,11 +1,11 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  generateName: ec2-postgresql-${{ values.instanceName }}-
-  namespace: ${{ values.namespace }}
+  name: ec2-postgresql-${{ values.instanceName }}
   labels:
     app.kubernetes.io/part-of: platformcon-wescale
     ec2-postgresql/instance: ${{ values.instanceName }}
+    tssc/gitops: ${{ values.instanceName }}
 spec:
   pipelineRef:
     name: ec2-postgresql

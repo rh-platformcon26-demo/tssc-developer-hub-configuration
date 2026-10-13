@@ -4,9 +4,10 @@ metadata:
   name: ec2-postgresql-template
   title: Provision AWS EC2 with PostgreSQL (Ansible + Tekton)
   description: >
-    Create a one-shot OpenShift Pipelines PipelineRun that clones the ansible
-    repository and runs the ec2-postgresql playbook to provision a Fedora EC2
-    instance with PostgreSQL (localhost only, access via SSH tunnel).
+    Publish a GitOps repository and create an Argo CD Application that syncs a
+    Tekton PipelineRun. The pipeline clones the ansible repository and runs
+    ec2-postgresql to provision a Fedora EC2 instance with PostgreSQL
+    (localhost only, access via SSH tunnel).
   tags:
     - aws
     - ansible
@@ -14,6 +15,7 @@ metadata:
     - tekton
     - infrastructure
     - ec2
+    - gitops
 spec:
   owner: tssc
   type: infrastructure
@@ -26,11 +28,12 @@ spec:
         - keyName
         - postgresPassword
         - namespace
+        - repoOwner
       properties:
         instanceName:
           title: Instance Name
           type: string
-          description: EC2 Name tag and Ansible instance_name
+          description: EC2 Name tag and Ansible instance_name (also used in GitLab repo name)
           default: ansible-fedora-postgres
           ui:autofocus: true
           maxLength: 48
@@ -50,8 +53,13 @@ spec:
         namespace:
           title: CI Namespace
           type: string
-          description: Namespace where the PipelineRun runs (Secrets must exist here)
+          description: Namespace where Argo syncs the PipelineRun (Secrets must exist here)
           default: tssc-app-ci
+        repoOwner:
+          title: GitLab Repo Owner
+          type: string
+          description: GitLab group/user that will own the GitOps repository
+          default: development
         postgresPassword:
           title: PostgreSQL Password
           type: string
@@ -102,11 +110,11 @@ spec:
       input:
         entityRef: component:default/provisioning-data
 
-    - id: generate-pipelinerun
-      name: Generate PipelineRun Manifest
+    - id: fetch-gitops-skeleton
+      name: Generate GitOps Manifests
       action: fetch:template
       input:
-        url: ./skeleton
+        url: ./gitops-template
         values:
           instanceName: ${{ parameters.instanceName }}
           namespace: ${{ parameters.namespace }}
@@ -123,59 +131,49 @@ spec:
           sshSecret: ${{ parameters.sshSecret }}
           ansibleGitRevision: ${{ parameters.ansibleGitRevision }}
           ansibleGitUrl: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/ansible.git'
+          repoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}-ec2-pg-gitops'
+          argoNS: tssc-gitops
+          argoProject: default
+          defaultBranch: master
+          owner: user:default/${{ user.entity.metadata.name }}
 
-    - id: apply-pipelinerun
-      name: Create PipelineRun
-      action: kubernetes:apply
+    - id: publish-gitlab-gitops
+      name: Publish GitOps Repository to GitLab
+      action: publish:gitlab
       input:
-        namespaced: true
-        manifest: |
-          apiVersion: tekton.dev/v1
-          kind: PipelineRun
-          metadata:
-            generateName: ec2-postgresql-${{ parameters.instanceName }}-
-            namespace: ${{ parameters.namespace }}
-            labels:
-              app.kubernetes.io/part-of: platformcon-wescale
-              ec2-postgresql/instance: ${{ parameters.instanceName }}
-          spec:
-            pipelineRef:
-              name: ec2-postgresql
-            params:
-              - name: ANSIBLE_GIT_URL
-                value: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/ansible.git
-              - name: ANSIBLE_GIT_REVISION
-                value: ${{ parameters.ansibleGitRevision }}
-              - name: AWS_REGION
-                value: ${{ parameters.awsRegion }}
-              - name: VPC_ID
-                value: ${{ parameters.vpcId }}
-              - name: SUBNET_ID
-                value: ${{ parameters.subnetId }}
-              - name: KEY_NAME
-                value: ${{ parameters.keyName }}
-              - name: INSTANCE_NAME
-                value: ${{ parameters.instanceName }}
-              - name: INSTANCE_TYPE
-                value: ${{ parameters.instanceType }}
-              - name: SSH_INGRESS_CIDR
-                value: ${{ parameters.sshIngressCidr }}
-              - name: POSTGRES_DB
-                value: ${{ parameters.postgresDb }}
-              - name: POSTGRES_USER
-                value: ${{ parameters.postgresUser }}
-              - name: POSTGRES_PASSWORD
-                value: ${{ parameters.postgresPassword }}
-              - name: AWS_SECRET
-                value: ${{ parameters.awsSecret }}
-              - name: SSH_SECRET
-                value: ${{ parameters.sshSecret }}
+        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.instanceName }}-ec2-pg-gitops'
+        defaultBranch: master
+        repoVisibility: public
+
+    - id: create-argocd-resources
+      name: Create Argo CD Resources
+      action: argocd:create-resources
+      input:
+        appName: ${{ parameters.instanceName }}-ec2-pg-app-of-apps
+        argoInstance: default
+        namespace: tssc-gitops
+        repoUrl: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}-ec2-pg-gitops.git
+        path: './app-of-apps'
+
+    - id: register-gitops
+      name: Register GitOps in Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['publish-gitlab-gitops'].output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
 
   output:
+    links:
+      - title: GitOps Repository
+        url: ${{ steps['publish-gitlab-gitops'].output.remoteUrl }}
+      - title: Open GitOps Resource in catalog
+        icon: catalog
+        entityRef: ${{ steps['register-gitops'].output.entityRef }}
     text:
       - title: Next steps
         content: |
-          A PipelineRun was created in namespace **${{ parameters.namespace }}**.
+          Argo CD will sync PipelineRun `ec2-postgresql-${{ parameters.instanceName }}`
+          into namespace **${{ parameters.namespace }}**.
 
           Prerequisites in that namespace:
           - Secret `${{ parameters.awsSecret }}` with keys `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
@@ -184,7 +182,8 @@ spec:
 
           Watch progress:
           ```
-          oc get pipelinerun -n ${{ parameters.namespace }} -l ec2-postgresql/instance=${{ parameters.instanceName }}
+          oc get pipelinerun -n ${{ parameters.namespace }} ec2-postgresql-${{ parameters.instanceName }}
+          oc get application -n tssc-gitops ${{ parameters.instanceName }}-ec2-pg
           ```
 
           After success, SSH-tunnel to PostgreSQL:

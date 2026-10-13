@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ${{ values.instanceName }}-ec2-pg
+  namespace: ${{ values.argoNS }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    tssc/gitops: ${{ values.instanceName }}
+    app.kubernetes.io/part-of: platformcon-wescale
+spec:
+  project: ${{ values.argoProject }}
+  source:
+    repoURL: ${{ values.repoURL }}.git
+    targetRevision: ${{ values.defaultBranch }}
+    path: ./manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ${{ values.namespace }}
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
