@@ -8,3 +8,4 @@ spec:
   - ./scaffolder-templates/quarkus-stssc-template/template.yaml
   - ./scaffolder-templates/quarkus-stssc-jenkins-template/template.yaml
   - ./scaffolder-templates/quarkus-stssc-pipeline-update-template/template.yaml
+  - ./scaffolder-templates/ec2-postgresql-template/template.yaml

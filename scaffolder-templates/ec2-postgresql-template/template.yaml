@@ -1,0 +1,194 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: ec2-postgresql-template
+  title: Provision AWS EC2 with PostgreSQL (Ansible + Tekton)
+  description: >
+    Create a one-shot OpenShift Pipelines PipelineRun that clones the ansible
+    repository and runs the ec2-postgresql playbook to provision a Fedora EC2
+    instance with PostgreSQL (localhost only, access via SSH tunnel).
+  tags:
+    - aws
+    - ansible
+    - postgresql
+    - tekton
+    - infrastructure
+    - ec2
+spec:
+  owner: tssc
+  type: infrastructure
+  parameters:
+    - title: Instance
+      required:
+        - instanceName
+        - vpcId
+        - subnetId
+        - keyName
+        - postgresPassword
+        - namespace
+      properties:
+        instanceName:
+          title: Instance Name
+          type: string
+          description: EC2 Name tag and Ansible instance_name
+          default: ansible-fedora-postgres
+          ui:autofocus: true
+          maxLength: 48
+          pattern: '^[a-z]([a-z0-9-]*[a-z0-9])?$'
+        vpcId:
+          title: VPC ID
+          type: string
+          description: Existing AWS VPC (e.g. vpc-xxxxxxxx)
+        subnetId:
+          title: Subnet ID
+          type: string
+          description: Existing subnet (prefer public for SSH)
+        keyName:
+          title: EC2 Key Pair Name
+          type: string
+          description: Existing EC2 key pair name (must match SSH secret)
+        namespace:
+          title: CI Namespace
+          type: string
+          description: Namespace where the PipelineRun runs (Secrets must exist here)
+          default: tssc-app-ci
+        postgresPassword:
+          title: PostgreSQL Password
+          type: string
+          description: Password for the application database user
+          ui:field: Secret
+          ui:widget: password
+    - title: Optional Settings
+      properties:
+        awsRegion:
+          title: AWS Region
+          type: string
+          default: eu-west-3
+        instanceType:
+          title: Instance Type
+          type: string
+          default: t3.medium
+        postgresDb:
+          title: PostgreSQL Database
+          type: string
+          default: appdb
+        postgresUser:
+          title: PostgreSQL User
+          type: string
+          default: appuser
+        sshIngressCidr:
+          title: SSH Ingress CIDR
+          type: string
+          default: 0.0.0.0/0
+        awsSecret:
+          title: AWS Credentials Secret
+          type: string
+          description: Secret with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+          default: aws-credentials
+        sshSecret:
+          title: SSH Key Secret
+          type: string
+          description: Secret with key ssh-privatekey (PEM)
+          default: ec2-ssh-key
+        ansibleGitRevision:
+          title: Ansible Git Revision
+          type: string
+          default: main
+
+  steps:
+    - id: fetch-provision-data
+      name: Fetch Provision Data
+      action: catalog:fetch
+      input:
+        entityRef: component:default/provisioning-data
+
+    - id: generate-pipelinerun
+      name: Generate PipelineRun Manifest
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          instanceName: ${{ parameters.instanceName }}
+          namespace: ${{ parameters.namespace }}
+          vpcId: ${{ parameters.vpcId }}
+          subnetId: ${{ parameters.subnetId }}
+          keyName: ${{ parameters.keyName }}
+          awsRegion: ${{ parameters.awsRegion }}
+          instanceType: ${{ parameters.instanceType }}
+          sshIngressCidr: ${{ parameters.sshIngressCidr }}
+          postgresDb: ${{ parameters.postgresDb }}
+          postgresUser: ${{ parameters.postgresUser }}
+          postgresPassword: ${{ parameters.postgresPassword }}
+          awsSecret: ${{ parameters.awsSecret }}
+          sshSecret: ${{ parameters.sshSecret }}
+          ansibleGitRevision: ${{ parameters.ansibleGitRevision }}
+          ansibleGitUrl: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/ansible.git'
+
+    - id: apply-pipelinerun
+      name: Create PipelineRun
+      action: kubernetes:apply
+      input:
+        namespaced: true
+        manifest: |
+          apiVersion: tekton.dev/v1
+          kind: PipelineRun
+          metadata:
+            generateName: ec2-postgresql-${{ parameters.instanceName }}-
+            namespace: ${{ parameters.namespace }}
+            labels:
+              app.kubernetes.io/part-of: platformcon-wescale
+              ec2-postgresql/instance: ${{ parameters.instanceName }}
+          spec:
+            pipelineRef:
+              name: ec2-postgresql
+            params:
+              - name: ANSIBLE_GIT_URL
+                value: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/ansible.git
+              - name: ANSIBLE_GIT_REVISION
+                value: ${{ parameters.ansibleGitRevision }}
+              - name: AWS_REGION
+                value: ${{ parameters.awsRegion }}
+              - name: VPC_ID
+                value: ${{ parameters.vpcId }}
+              - name: SUBNET_ID
+                value: ${{ parameters.subnetId }}
+              - name: KEY_NAME
+                value: ${{ parameters.keyName }}
+              - name: INSTANCE_NAME
+                value: ${{ parameters.instanceName }}
+              - name: INSTANCE_TYPE
+                value: ${{ parameters.instanceType }}
+              - name: SSH_INGRESS_CIDR
+                value: ${{ parameters.sshIngressCidr }}
+              - name: POSTGRES_DB
+                value: ${{ parameters.postgresDb }}
+              - name: POSTGRES_USER
+                value: ${{ parameters.postgresUser }}
+              - name: POSTGRES_PASSWORD
+                value: ${{ parameters.postgresPassword }}
+              - name: AWS_SECRET
+                value: ${{ parameters.awsSecret }}
+              - name: SSH_SECRET
+                value: ${{ parameters.sshSecret }}
+
+  output:
+    text:
+      - title: Next steps
+        content: |
+          A PipelineRun was created in namespace **${{ parameters.namespace }}**.
+
+          Prerequisites in that namespace:
+          - Secret `${{ parameters.awsSecret }}` with keys `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+          - Secret `${{ parameters.sshSecret }}` with key `ssh-privatekey`
+          - Pipeline `ec2-postgresql` and Task `ansible-ec2-postgresql` installed
+
+          Watch progress:
+          ```
+          oc get pipelinerun -n ${{ parameters.namespace }} -l ec2-postgresql/instance=${{ parameters.instanceName }}
+          ```
+
+          After success, SSH-tunnel to PostgreSQL:
+          ```
+          ssh -i <key.pem> -L 5432:127.0.0.1:5432 fedora@<ec2_ip>
+          psql -h 127.0.0.1 -p 5432 -U ${{ parameters.postgresUser }} -d ${{ parameters.postgresDb }}
+          ```
