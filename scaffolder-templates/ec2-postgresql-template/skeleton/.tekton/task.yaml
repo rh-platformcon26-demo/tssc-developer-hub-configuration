@@ -130,6 +130,25 @@ spec:
         #!/usr/bin/env bash
         set -euo pipefail
 
+        # OpenShift assigns a random UID with no /etc/passwd entry; OpenSSH
+        # then fails with: "No user exists for uid <uid>".
+        export HOME=/tmp
+        export USER="${USER:-ansible}"
+        uid="$(id -u)"
+        gid="$(id -g)"
+        if ! getent passwd "${uid}" >/dev/null 2>&1; then
+          if [[ -w /etc/passwd ]]; then
+            echo "${USER}:x:${uid}:${gid}:Ansible:${HOME}:/bin/bash" >> /etc/passwd
+          else
+            echo "WARNING: /etc/passwd not writable for uid ${uid}" >&2
+          fi
+        fi
+        mkdir -p "${HOME}/.ssh" /tmp/.ansible/tmp
+        chmod 700 "${HOME}/.ssh"
+        export ANSIBLE_LOCAL_TMP=/tmp/.ansible/tmp
+        export ANSIBLE_REMOTE_TMP=/tmp
+        export ANSIBLE_HOST_KEY_CHECKING=False
+
         ssh_key_src="/var/run/secrets/ssh/ssh-privatekey"
         ssh_key="/tmp/ec2-ssh-key.pem"
         ansible_dir="/tmp/ansible"
