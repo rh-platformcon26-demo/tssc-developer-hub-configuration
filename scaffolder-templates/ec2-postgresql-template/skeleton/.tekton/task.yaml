@@ -130,21 +130,45 @@ spec:
         #!/usr/bin/env bash
         set -euo pipefail
 
-        # OpenShift assigns a random UID with no /etc/passwd entry; OpenSSH
-        # then fails with: "No user exists for uid <uid>".
+        # OpenShift arbitrary UID: OpenSSH needs a passwd entry; many images
+        # keep /etc/passwd read-only. Prefer nss_wrapper, then passwd append.
+        # The playbook also uses ansible_connection=paramiko for the EC2 host.
         export HOME=/tmp
         export USER="${USER:-ansible}"
         uid="$(id -u)"
         gid="$(id -g)"
-        if ! getent passwd "${uid}" >/dev/null 2>&1; then
-          if [[ -w /etc/passwd ]]; then
-            echo "${USER}:x:${uid}:${gid}:Ansible:${HOME}:/bin/bash" >> /etc/passwd
-          else
-            echo "WARNING: /etc/passwd not writable for uid ${uid}" >&2
-          fi
-        fi
         mkdir -p "${HOME}/.ssh" /tmp/.ansible/tmp
         chmod 700 "${HOME}/.ssh"
+
+        passwd_file="${HOME}/passwd"
+        group_file="${HOME}/group"
+        echo "${USER}:x:${uid}:${gid}:Ansible:${HOME}:/bin/bash" > "${passwd_file}"
+        echo "${USER}:x:${gid}:" > "${group_file}"
+
+        nss_lib=""
+        for candidate in \
+          /usr/lib64/libnss_wrapper.so \
+          /usr/lib64/libnss_wrapper.so.0 \
+          /usr/lib/libnss_wrapper.so \
+          /usr/lib/libnss_wrapper.so.0; do
+          if [[ -f "${candidate}" ]]; then
+            nss_lib="${candidate}"
+            break
+          fi
+        done
+
+        if [[ -n "${nss_lib}" ]]; then
+          export LD_PRELOAD="${nss_lib}${LD_PRELOAD:+:${LD_PRELOAD}}"
+          export NSS_WRAPPER_PASSWD="${passwd_file}"
+          export NSS_WRAPPER_GROUP="${group_file}"
+          echo "Identity: nss_wrapper (${nss_lib}) for uid ${uid}"
+        elif [[ -w /etc/passwd ]] && ! getent passwd "${uid}" >/dev/null 2>&1; then
+          cat "${passwd_file}" >> /etc/passwd
+          echo "Identity: appended uid ${uid} to /etc/passwd"
+        else
+          echo "Identity: no nss_wrapper and cannot write /etc/passwd (uid ${uid}); relying on paramiko"
+        fi
+
         export ANSIBLE_LOCAL_TMP=/tmp/.ansible/tmp
         export ANSIBLE_REMOTE_TMP=/tmp
         export ANSIBLE_HOST_KEY_CHECKING=False
@@ -160,6 +184,16 @@ spec:
         fi
         cp "${ssh_key_src}" "${ssh_key}"
         chmod 600 "${ssh_key}"
+
+        # Paramiko avoids the OpenSSH client UID/passwd issue entirely.
+        if ! python3 -c "import paramiko" >/dev/null 2>&1; then
+          echo "Installing paramiko for Ansible SSH from arbitrary UID"
+          pip3 install --user --disable-pip-version-check paramiko
+          user_site="$(python3 -c 'import site; print(site.getusersitepackages())')"
+          export PATH="${HOME}/.local/bin:${PATH}"
+          export PYTHONPATH="${user_site}${PYTHONPATH:+:${PYTHONPATH}}"
+        fi
+        python3 -c "import paramiko; print('paramiko', paramiko.__version__)"
 
         echo "Cloning ${ANSIBLE_GIT_URL} (${ANSIBLE_GIT_REVISION})"
         rm -rf "${ansible_dir}"

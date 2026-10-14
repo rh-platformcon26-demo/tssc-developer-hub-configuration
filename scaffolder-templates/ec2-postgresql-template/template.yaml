@@ -125,7 +125,7 @@ spec:
           awsSecret: ${{ parameters.awsSecret }}
           sshSecret: ${{ parameters.sshSecret }}
           ansibleGitRevision: ${{ parameters.ansibleGitRevision }}
-          ansibleGitUrl: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/ansible.git'
+          ansibleGitUrl: 'https://github.com/rh-platformcon26-demo/ansible.git'
 
     - id: publish-gitlab-source
       name: Publish Source Repository
