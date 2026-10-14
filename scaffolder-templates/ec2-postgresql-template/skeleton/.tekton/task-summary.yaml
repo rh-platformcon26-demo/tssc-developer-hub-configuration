@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: ec2-postgresql-summary
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    description: |
+      Visual summary step for the EC2 + PostgreSQL provisioning pipeline.
+spec:
+  description: >-
+    Print provisioning outcome at the end of the PipelineRun.
+  params:
+    - name: INSTANCE_NAME
+      type: string
+    - name: AWS_REGION
+      type: string
+    - name: POSTGRES_DB
+      type: string
+      default: appdb
+    - name: POSTGRES_USER
+      type: string
+      default: appuser
+    - name: POSTGRES_PORT
+      type: string
+      default: "5432"
+    - name: PROVISION_STATUS
+      type: string
+      description: Succeeded or Failed from the provision task
+      default: Unknown
+    - name: STARTED_AT
+      type: string
+      default: ""
+  steps:
+    - name: summary
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        ended="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        status="$(params.PROVISION_STATUS)"
+        cat <<EOF
+
+        ╔══════════════════════════════════════════════════════════╗
+        ║  EC2 + PostgreSQL provisioning — SUMMARY                 ║
+        ╚══════════════════════════════════════════════════════════╝
+
+        Instance name : $(params.INSTANCE_NAME)
+        AWS region    : $(params.AWS_REGION)
+        Status        : ${status}
+        Started at    : $(params.STARTED_AT)
+        Finished at   : ${ended}
+
+        EOF
+        if [[ "${status}" == "Succeeded" ]]; then
+          cat <<EOF
+        PostgreSQL listens on localhost:$(params.POSTGRES_PORT) only.
+
+        SSH tunnel:
+          ssh -i <key.pem> -L $(params.POSTGRES_PORT):127.0.0.1:$(params.POSTGRES_PORT) \\
+            fedora@<ec2_public_ip>
+          psql -h 127.0.0.1 -p $(params.POSTGRES_PORT) \\
+            -U $(params.POSTGRES_USER) -d $(params.POSTGRES_DB)
+
+        EOF
+        else
+          cat <<EOF
+        Provisioning did not succeed. Check the provision task logs
+        (Ansible playbook output) for details.
+
+        EOF
+        fi
+        echo "End Summary"

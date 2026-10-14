@@ -25,8 +25,10 @@ Same pattern as the Quarkus TSSC template:
 
 ```
 .tekton/on-push.yaml       # PipelineRun (PaC trigger)
-.tekton/pipeline.yaml      # Pipeline ec2-postgresql
+.tekton/pipeline.yaml      # Pipeline: init → provision → summary
+.tekton/task-init.yaml     # Task ec2-postgresql-init
 .tekton/task.yaml          # Task ansible-ec2-postgresql
+.tekton/task-summary.yaml  # Task ec2-postgresql-summary
 catalog-info.yaml          # System, Component, EC2 + DB Resources
 README.md
 ```

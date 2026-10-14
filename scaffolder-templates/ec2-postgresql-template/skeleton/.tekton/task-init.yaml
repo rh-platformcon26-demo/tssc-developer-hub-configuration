@@ -1,0 +1,64 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: ec2-postgresql-init
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    description: |
+      Visual init step for the EC2 + PostgreSQL provisioning pipeline.
+spec:
+  description: >-
+    Print provisioning context at the start of the PipelineRun.
+  params:
+    - name: INSTANCE_NAME
+      type: string
+    - name: AWS_REGION
+      type: string
+    - name: VPC_ID
+      type: string
+    - name: SUBNET_ID
+      type: string
+    - name: INSTANCE_TYPE
+      type: string
+      default: t3.medium
+    - name: POSTGRES_DB
+      type: string
+      default: appdb
+    - name: POSTGRES_USER
+      type: string
+      default: appuser
+    - name: ANSIBLE_GIT_URL
+      type: string
+    - name: ANSIBLE_GIT_REVISION
+      type: string
+      default: main
+  results:
+    - name: started-at
+      description: UTC timestamp when provisioning started
+  steps:
+    - name: init
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo -n "${started}" > "$(results.started-at.path)"
+        cat <<EOF
+
+        ╔══════════════════════════════════════════════════════════╗
+        ║  EC2 + PostgreSQL provisioning — INIT                    ║
+        ╚══════════════════════════════════════════════════════════╝
+
+        Instance name : $(params.INSTANCE_NAME)
+        Instance type : $(params.INSTANCE_TYPE)
+        AWS region    : $(params.AWS_REGION)
+        VPC           : $(params.VPC_ID)
+        Subnet        : $(params.SUBNET_ID)
+        PostgreSQL DB : $(params.POSTGRES_DB) (user $(params.POSTGRES_USER))
+        Ansible repo  : $(params.ANSIBLE_GIT_URL) @ $(params.ANSIBLE_GIT_REVISION)
+        Started at    : ${started}
+
+        Next: run Ansible playbook (provision EC2 + install PostgreSQL)
+
+        EOF

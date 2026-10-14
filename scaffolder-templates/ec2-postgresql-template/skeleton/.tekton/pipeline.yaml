@@ -8,8 +8,8 @@ metadata:
     pipelines.openshift.io/used-by: infrastructure
   annotations:
     description: |
-      One-shot pipeline that provisions a Fedora EC2 instance with PostgreSQL
-      by cloning the ansible repository and running ec2-postgresql/playbooks/site.yml.
+      Provisions a Fedora EC2 instance with PostgreSQL via Ansible.
+      Task chain: init → provision → summary (finally).
 spec:
   description: >
     Provision AWS EC2 (Fedora) + PostgreSQL via Ansible ec2-postgresql roles.
@@ -57,7 +57,32 @@ spec:
       description: Provisioning status
       value: $(tasks.provision.results.status)
   tasks:
+    - name: init
+      taskRef:
+        name: ec2-postgresql-init
+      params:
+        - name: INSTANCE_NAME
+          value: $(params.INSTANCE_NAME)
+        - name: AWS_REGION
+          value: $(params.AWS_REGION)
+        - name: VPC_ID
+          value: $(params.VPC_ID)
+        - name: SUBNET_ID
+          value: $(params.SUBNET_ID)
+        - name: INSTANCE_TYPE
+          value: $(params.INSTANCE_TYPE)
+        - name: POSTGRES_DB
+          value: $(params.POSTGRES_DB)
+        - name: POSTGRES_USER
+          value: $(params.POSTGRES_USER)
+        - name: ANSIBLE_GIT_URL
+          value: $(params.ANSIBLE_GIT_URL)
+        - name: ANSIBLE_GIT_REVISION
+          value: $(params.ANSIBLE_GIT_REVISION)
+
     - name: provision
+      runAfter:
+        - init
       taskRef:
         name: ansible-ec2-postgresql
       params:
@@ -89,3 +114,21 @@ spec:
           value: $(params.AWS_SECRET)
         - name: SSH_SECRET
           value: $(params.SSH_SECRET)
+
+  finally:
+    - name: summary
+      taskRef:
+        name: ec2-postgresql-summary
+      params:
+        - name: INSTANCE_NAME
+          value: $(params.INSTANCE_NAME)
+        - name: AWS_REGION
+          value: $(params.AWS_REGION)
+        - name: POSTGRES_DB
+          value: $(params.POSTGRES_DB)
+        - name: POSTGRES_USER
+          value: $(params.POSTGRES_USER)
+        - name: PROVISION_STATUS
+          value: $(tasks.provision.status)
+        - name: STARTED_AT
+          value: $(tasks.init.results.started-at)

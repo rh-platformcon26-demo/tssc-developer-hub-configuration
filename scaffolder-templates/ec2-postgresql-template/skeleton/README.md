@@ -5,8 +5,11 @@ via the `ec2-postgresql` Tekton pipeline (Ansible).
 
 ## Trigger
 
-Push to `master` runs `.tekton/on-push.yaml` with the local Pipeline/Task
-definitions in `.tekton/pipeline.yaml` and `.tekton/task.yaml`.
+Push to `master` runs `.tekton/on-push.yaml`. Task chain:
+
+1. `init` — print provisioning context
+2. `provision` — Ansible EC2 + PostgreSQL
+3. `summary` (finally) — print outcome / SSH tunnel reminder
 
 ## Prerequisites (CI namespace)
 
