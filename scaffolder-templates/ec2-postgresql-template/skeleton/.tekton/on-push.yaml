@@ -3,8 +3,10 @@ kind: PipelineRun
 metadata:
   name: ec2-postgresql-provision
   annotations:
+    # Ignore catalog-only commits that update the EC2 IP ([skip ci] in message).
     pipelinesascode.tekton.dev/on-cel-expression: |
-      body.object_kind == "push" && body.ref == "refs/heads/master"
+      body.object_kind == "push" && body.ref == "refs/heads/master" &&
+      !(has(body.commits) && body.commits.exists(c, c.message.contains("[skip ci]")))
   labels:
     backstage.io/kubernetes-id: "${{ values.name }}"
     janus-idp.io/tekton: "${{ values.name }}"
@@ -16,6 +18,8 @@ spec:
       value: "${{ values.ansibleGitUrl }}"
     - name: ANSIBLE_GIT_REVISION
       value: "${{ values.ansibleGitRevision }}"
+    - name: SOURCE_REPO_URL
+      value: "https://${{ values.gitlabHost }}/${{ values.destination }}"
     - name: AWS_REGION
       value: "${{ values.awsRegion }}"
     - name: VPC_ID

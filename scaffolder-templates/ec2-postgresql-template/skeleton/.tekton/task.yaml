@@ -8,14 +8,17 @@ metadata:
     description: |
       Clones the ansible repository and runs the ec2-postgresql playbook
       to provision a Fedora EC2 instance with PostgreSQL (localhost only).
+      On success, updates catalog-info.yaml in the source repo with the
+      instance public IP (commit message includes [skip ci]).
 
       Cluster prerequisites (same namespace as the PipelineRun):
       - Secret aws-credentials with keys AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
       - Secret ec2-ssh-key with key ssh-privatekey (PEM for the EC2 key pair)
+      - Secret gitlab-auth-secret (password) to push catalog updates
 spec:
   description: >
     Provision an AWS Fedora EC2 VM and install PostgreSQL via the
-    ansible/ec2-postgresql playbook.
+    ansible/ec2-postgresql playbook, then publish the public IP to RHDH catalog.
   params:
     - name: ANSIBLE_GIT_URL
       type: string
@@ -24,6 +27,14 @@ spec:
       type: string
       default: main
       description: Git revision (branch, tag, or commit)
+    - name: SOURCE_REPO_URL
+      type: string
+      description: HTTPS URL of the scaffolder source repo (catalog-info.yaml)
+      default: ""
+    - name: SOURCE_GIT_SECRET
+      type: string
+      description: Secret with GitLab token (key password)
+      default: gitlab-auth-secret
     - name: AWS_REGION
       type: string
       default: eu-west-3
@@ -69,6 +80,12 @@ spec:
   results:
     - name: status
       description: Succeeded or Failed
+    - name: public-ip
+      description: EC2 public IP address
+    - name: private-ip
+      description: EC2 private IP address
+    - name: instance-id
+      description: EC2 instance ID
   volumes:
     - name: ssh-key
       secret:
@@ -76,6 +93,13 @@ spec:
         items:
           - key: ssh-privatekey
             path: ssh-privatekey
+            mode: 0400
+    - name: gitlab-auth
+      secret:
+        secretName: $(params.SOURCE_GIT_SECRET)
+        items:
+          - key: password
+            path: password
             mode: 0400
   steps:
     - name: provision
@@ -88,6 +112,8 @@ spec:
           value: $(params.ANSIBLE_GIT_URL)
         - name: ANSIBLE_GIT_REVISION
           value: $(params.ANSIBLE_GIT_REVISION)
+        - name: SOURCE_REPO_URL
+          value: $(params.SOURCE_REPO_URL)
         - name: AWS_REGION
           value: $(params.AWS_REGION)
         - name: VPC_ID
@@ -122,9 +148,18 @@ spec:
           value: $(params.AWS_REGION)
         - name: STATUS_PATH
           value: $(results.status.path)
+        - name: PUBLIC_IP_PATH
+          value: $(results.public-ip.path)
+        - name: PRIVATE_IP_PATH
+          value: $(results.private-ip.path)
+        - name: INSTANCE_ID_PATH
+          value: $(results.instance-id.path)
       volumeMounts:
         - name: ssh-key
           mountPath: /var/run/secrets/ssh
+          readOnly: true
+        - name: gitlab-auth
+          mountPath: /var/run/secrets/gitlab
           readOnly: true
       script: |
         #!/usr/bin/env bash
@@ -176,6 +211,11 @@ spec:
         ssh_key_src="/var/run/secrets/ssh/ssh-privatekey"
         ssh_key="/tmp/ec2-ssh-key.pem"
         ansible_dir="/tmp/ansible"
+        result_json="/tmp/ec2-provision-result.json"
+
+        echo -n "" > "${PUBLIC_IP_PATH}"
+        echo -n "" > "${PRIVATE_IP_PATH}"
+        echo -n "" > "${INSTANCE_ID_PATH}"
 
         if [[ ! -f "${ssh_key_src}" ]]; then
           echo "SSH private key not found at ${ssh_key_src}" >&2
@@ -225,16 +265,98 @@ spec:
           -e "ssh_ingress_cidr=${SSH_INGRESS_CIDR}" \
           -e "postgres_db=${POSTGRES_DB}" \
           -e "postgres_user=${POSTGRES_USER}" \
-          -e "postgres_password=${POSTGRES_PASSWORD}"
+          -e "postgres_password=${POSTGRES_PASSWORD}" \
+          -e "provision_result_path=${result_json}"
         rc=$?
         set -e
 
-        if [[ "${rc}" -eq 0 ]]; then
-          echo -n "Succeeded" > "${STATUS_PATH}"
-        else
+        if [[ "${rc}" -ne 0 ]]; then
           echo -n "Failed" > "${STATUS_PATH}"
           exit "${rc}"
         fi
+
+        if [[ ! -f "${result_json}" ]]; then
+          echo "Provision result file missing: ${result_json}" >&2
+          echo -n "Failed" > "${STATUS_PATH}"
+          exit 1
+        fi
+
+        public_ip="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("public_ip",""))' "${result_json}")"
+        private_ip="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("private_ip",""))' "${result_json}")"
+        instance_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("instance_id",""))' "${result_json}")"
+        echo -n "${public_ip}" > "${PUBLIC_IP_PATH}"
+        echo -n "${private_ip}" > "${PRIVATE_IP_PATH}"
+        echo -n "${instance_id}" > "${INSTANCE_ID_PATH}"
+        echo "Provisioned instance_id=${instance_id} public_ip=${public_ip} private_ip=${private_ip}"
+
+        if [[ -n "${SOURCE_REPO_URL}" && -n "${public_ip}" ]]; then
+          token="$(cat /var/run/secrets/gitlab/password)"
+          # Inject token into HTTPS remote for push
+          if [[ "${SOURCE_REPO_URL}" =~ ^https://([^/]+)/(.+)$ ]]; then
+            host="${BASH_REMATCH[1]}"
+            path="${BASH_REMATCH[2]%.git}"
+            auth_url="https://oauth2:${token}@${host}/${path}.git"
+          else
+            echo "SOURCE_REPO_URL must be https://..." >&2
+            echo -n "Failed" > "${STATUS_PATH}"
+            exit 1
+          fi
+
+          catalog_dir="/tmp/source-catalog"
+          rm -rf "${catalog_dir}"
+          git clone --depth 1 --branch master "${auth_url}" "${catalog_dir}"
+          catalog_file="${catalog_dir}/catalog-info.yaml"
+          if [[ ! -f "${catalog_file}" ]]; then
+            echo "catalog-info.yaml not found in source repo" >&2
+            echo -n "Failed" > "${STATUS_PATH}"
+            exit 1
+          fi
+
+          PUBLIC_IP="${public_ip}" PRIVATE_IP="${private_ip}" INSTANCE_ID="${instance_id}" \
+            CATALOG_FILE="${catalog_file}" python3 <<'PY'
+        import os, pathlib, re
+        path = pathlib.Path(os.environ["CATALOG_FILE"])
+        public_ip = os.environ["PUBLIC_IP"]
+        private_ip = os.environ["PRIVATE_IP"]
+        instance_id = os.environ["INSTANCE_ID"]
+        text = path.read_text()
+        for old, new in (
+            ("__EC2_PUBLIC_IP__", public_ip),
+            ("__EC2_PRIVATE_IP__", private_ip),
+            ("__EC2_INSTANCE_ID__", instance_id),
+        ):
+            text = text.replace(old, new)
+        replacements = {
+            r"(amazon\.com/ec2-public-ip:\s*).*": rf"\g<1>{public_ip}",
+            r"(amazon\.com/ec2-private-ip:\s*).*": rf"\g<1>{private_ip}",
+            r"(amazon\.com/ec2-instance-id:\s*).*": rf"\g<1>{instance_id}",
+            r'(description: "Fedora EC2 .* — public IP: ).*"': rf'\g<1>{public_ip}"',
+            r"(ssh://fedora@)[^\s\"]+": rf"\g<1>{public_ip}",
+            r"(title: SSH fedora@)[^\s\"]+": rf"\g<1>{public_ip}",
+            r"(#InstanceDetails:instanceId=)[^\s\"]+": rf"\g<1>{instance_id}",
+        }
+        for pattern, repl in replacements.items():
+            text = re.sub(pattern, repl, text)
+        path.write_text(text)
+        print(f"Updated {path} with public_ip={public_ip} instance_id={instance_id}")
+        PY
+
+          cd "${catalog_dir}"
+          git config user.email "pipelines-as-code@localhost"
+          git config user.name "pipelines-as-code"
+          git add catalog-info.yaml
+          if git diff --cached --quiet; then
+            echo "catalog-info.yaml already up to date"
+          else
+            git commit -m "Update EC2 public IP in catalog-info [skip ci]"
+            git push origin master
+            echo "Pushed catalog-info.yaml update to ${SOURCE_REPO_URL}"
+          fi
+        else
+          echo "Skipping catalog update (SOURCE_REPO_URL or public_ip empty)"
+        fi
+
+        echo -n "Succeeded" > "${STATUS_PATH}"
       securityContext:
         runAsNonRoot: true
         allowPrivilegeEscalation: false

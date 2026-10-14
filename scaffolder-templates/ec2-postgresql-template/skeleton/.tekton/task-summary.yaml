@@ -31,6 +31,12 @@ spec:
     - name: STARTED_AT
       type: string
       default: ""
+    - name: PUBLIC_IP
+      type: string
+      default: ""
+    - name: INSTANCE_ID
+      type: string
+      default: ""
   steps:
     - name: summary
       image: registry.access.redhat.com/ubi9/ubi-minimal:latest
@@ -39,6 +45,8 @@ spec:
         set -euo pipefail
         ended="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         status="$(params.PROVISION_STATUS)"
+        public_ip="$(params.PUBLIC_IP)"
+        instance_id="$(params.INSTANCE_ID)"
         cat <<EOF
 
         ╔══════════════════════════════════════════════════════════╗
@@ -46,6 +54,8 @@ spec:
         ╚══════════════════════════════════════════════════════════╝
 
         Instance name : $(params.INSTANCE_NAME)
+        Instance ID   : ${instance_id:-n/a}
+        Public IP     : ${public_ip:-n/a}
         AWS region    : $(params.AWS_REGION)
         Status        : ${status}
         Started at    : $(params.STARTED_AT)
@@ -58,9 +68,11 @@ spec:
 
         SSH tunnel:
           ssh -i <key.pem> -L $(params.POSTGRES_PORT):127.0.0.1:$(params.POSTGRES_PORT) \\
-            fedora@<ec2_public_ip>
+            fedora@${public_ip:-<ec2_public_ip>}
           psql -h 127.0.0.1 -p $(params.POSTGRES_PORT) \\
             -U $(params.POSTGRES_USER) -d $(params.POSTGRES_DB)
+
+        RHDH catalog Resource $(params.INSTANCE_NAME)-ec2 was updated with this IP.
 
         EOF
         else

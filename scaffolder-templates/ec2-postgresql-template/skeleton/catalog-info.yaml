@@ -38,7 +38,7 @@ apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
   name: ${{ values.name }}-ec2
-  description: Fedora EC2 instance ${{ values.name }} (${{ values.instanceType }}) in ${{ values.awsRegion }}
+  description: "Fedora EC2 ${{ values.name }} (${{ values.instanceType }}) in ${{ values.awsRegion }} — public IP: __EC2_PUBLIC_IP__"
   labels:
     app.kubernetes.io/part-of: platformcon-wescale
   annotations:
@@ -47,6 +47,16 @@ metadata:
     amazon.com/vpc-id: ${{ values.vpcId }}
     amazon.com/subnet-id: ${{ values.subnetId }}
     amazon.com/key-name: ${{ values.keyName }}
+    amazon.com/ec2-public-ip: __EC2_PUBLIC_IP__
+    amazon.com/ec2-private-ip: __EC2_PRIVATE_IP__
+    amazon.com/ec2-instance-id: __EC2_INSTANCE_ID__
+  links:
+    - url: https://console.aws.amazon.com/ec2/home?region=${{ values.awsRegion }}#InstanceDetails:instanceId=__EC2_INSTANCE_ID__
+      title: AWS EC2 Console
+      icon: dashboard
+    - url: ssh://fedora@__EC2_PUBLIC_IP__
+      title: SSH fedora@__EC2_PUBLIC_IP__
+      icon: catalog
 spec:
   type: compute
   owner: ${{ values.owner }}

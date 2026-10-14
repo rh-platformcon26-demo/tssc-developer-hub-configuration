@@ -10,6 +10,7 @@ metadata:
     description: |
       Provisions a Fedora EC2 instance with PostgreSQL via Ansible.
       Task chain: init → provision → summary (finally).
+      On success, updates catalog-info.yaml with the instance public IP.
 spec:
   description: >
     Provision AWS EC2 (Fedora) + PostgreSQL via Ansible ec2-postgresql roles.
@@ -20,6 +21,10 @@ spec:
     - name: ANSIBLE_GIT_REVISION
       type: string
       default: main
+    - name: SOURCE_REPO_URL
+      type: string
+      description: HTTPS URL of the source repo containing catalog-info.yaml
+      default: ""
     - name: AWS_REGION
       type: string
       default: eu-west-3
@@ -56,6 +61,9 @@ spec:
     - name: status
       description: Provisioning status
       value: $(tasks.provision.results.status)
+    - name: public-ip
+      description: EC2 public IP
+      value: $(tasks.provision.results.public-ip)
   tasks:
     - name: init
       taskRef:
@@ -90,6 +98,8 @@ spec:
           value: $(params.ANSIBLE_GIT_URL)
         - name: ANSIBLE_GIT_REVISION
           value: $(params.ANSIBLE_GIT_REVISION)
+        - name: SOURCE_REPO_URL
+          value: $(params.SOURCE_REPO_URL)
         - name: AWS_REGION
           value: $(params.AWS_REGION)
         - name: VPC_ID
@@ -132,3 +142,7 @@ spec:
           value: $(tasks.provision.status)
         - name: STARTED_AT
           value: $(tasks.init.results.started-at)
+        - name: PUBLIC_IP
+          value: $(tasks.provision.results.public-ip)
+        - name: INSTANCE_ID
+          value: $(tasks.provision.results.instance-id)
