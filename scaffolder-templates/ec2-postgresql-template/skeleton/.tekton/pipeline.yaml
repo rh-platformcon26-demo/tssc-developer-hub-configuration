@@ -1,0 +1,91 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: ec2-postgresql
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+    pipelines.openshift.io/runtime: generic
+    pipelines.openshift.io/used-by: infrastructure
+  annotations:
+    description: |
+      One-shot pipeline that provisions a Fedora EC2 instance with PostgreSQL
+      by cloning the ansible repository and running ec2-postgresql/playbooks/site.yml.
+spec:
+  description: >
+    Provision AWS EC2 (Fedora) + PostgreSQL via Ansible ec2-postgresql roles.
+  params:
+    - name: ANSIBLE_GIT_URL
+      type: string
+      description: Git URL of the ansible repository
+    - name: ANSIBLE_GIT_REVISION
+      type: string
+      default: main
+    - name: AWS_REGION
+      type: string
+      default: eu-west-3
+    - name: VPC_ID
+      type: string
+    - name: SUBNET_ID
+      type: string
+    - name: KEY_NAME
+      type: string
+    - name: INSTANCE_NAME
+      type: string
+      default: ansible-fedora-postgres
+    - name: INSTANCE_TYPE
+      type: string
+      default: t3.medium
+    - name: SSH_INGRESS_CIDR
+      type: string
+      default: 0.0.0.0/0
+    - name: POSTGRES_DB
+      type: string
+      default: appdb
+    - name: POSTGRES_USER
+      type: string
+      default: appuser
+    - name: POSTGRES_PASSWORD
+      type: string
+    - name: AWS_SECRET
+      type: string
+      default: aws-credentials
+    - name: SSH_SECRET
+      type: string
+      default: ec2-ssh-key
+  results:
+    - name: status
+      description: Provisioning status
+      value: $(tasks.provision.results.status)
+  tasks:
+    - name: provision
+      taskRef:
+        name: ansible-ec2-postgresql
+      params:
+        - name: ANSIBLE_GIT_URL
+          value: $(params.ANSIBLE_GIT_URL)
+        - name: ANSIBLE_GIT_REVISION
+          value: $(params.ANSIBLE_GIT_REVISION)
+        - name: AWS_REGION
+          value: $(params.AWS_REGION)
+        - name: VPC_ID
+          value: $(params.VPC_ID)
+        - name: SUBNET_ID
+          value: $(params.SUBNET_ID)
+        - name: KEY_NAME
+          value: $(params.KEY_NAME)
+        - name: INSTANCE_NAME
+          value: $(params.INSTANCE_NAME)
+        - name: INSTANCE_TYPE
+          value: $(params.INSTANCE_TYPE)
+        - name: SSH_INGRESS_CIDR
+          value: $(params.SSH_INGRESS_CIDR)
+        - name: POSTGRES_DB
+          value: $(params.POSTGRES_DB)
+        - name: POSTGRES_USER
+          value: $(params.POSTGRES_USER)
+        - name: POSTGRES_PASSWORD
+          value: $(params.POSTGRES_PASSWORD)
+        - name: AWS_SECRET
+          value: $(params.AWS_SECRET)
+        - name: SSH_SECRET
+          value: $(params.SSH_SECRET)

@@ -15,15 +15,18 @@ Same pattern as the Quarkus TSSC template:
 3. Argo CD syncs into `tssc-app-ci`:
    - `Repository` pointing at the source repo
    - Job that creates the GitLab push webhook and a dummy commit
-4. Pipelines-as-Code fetches remote `ec2-postgresql` pipeline +
-   `ansible-ec2-postgresql` task from `tssc-sample-pipelines` and runs them.
+4. Pipelines-as-Code creates the PipelineRun from `.tekton/` (Pipeline + Task
+   are vendored in the source repo — they are not yet present on the lab
+   GitLab mirror of `tssc-sample-pipelines`, which returned 404 for remote URLs).
 
 ## Repository layout
 
 **Source**
 
 ```
-.tekton/on-push.yaml
+.tekton/on-push.yaml       # PipelineRun (PaC trigger)
+.tekton/pipeline.yaml      # Pipeline ec2-postgresql
+.tekton/task.yaml          # Task ansible-ec2-postgresql
 catalog-info.yaml          # System, Component, EC2 + DB Resources
 README.md
 ```

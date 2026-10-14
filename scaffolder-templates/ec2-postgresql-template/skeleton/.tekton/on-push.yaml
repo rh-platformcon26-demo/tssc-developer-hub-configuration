@@ -5,8 +5,6 @@ metadata:
   annotations:
     pipelinesascode.tekton.dev/on-cel-expression: |
       body.object_kind == "push" && body.ref == "refs/heads/master"
-    pipelinesascode.tekton.dev/pipeline: "https://${{ values.gitlabHost }}/rhdh/tssc-sample-pipelines/-/raw/main/pipelines/ec2-postgresql.yaml"
-    pipelinesascode.tekton.dev/task-0: "https://${{ values.gitlabHost }}/rhdh/tssc-sample-pipelines/-/raw/main/tasks/ansible-ec2-postgresql.yaml"
   labels:
     backstage.io/kubernetes-id: "${{ values.name }}"
     janus-idp.io/tekton: "${{ values.name }}"

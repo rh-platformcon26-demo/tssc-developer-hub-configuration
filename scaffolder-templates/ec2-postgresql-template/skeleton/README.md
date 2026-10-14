@@ -5,7 +5,8 @@ via the `ec2-postgresql` Tekton pipeline (Ansible).
 
 ## Trigger
 
-Push to `master` runs `.tekton/on-push.yaml`.
+Push to `master` runs `.tekton/on-push.yaml` with the local Pipeline/Task
+definitions in `.tekton/pipeline.yaml` and `.tekton/task.yaml`.
 
 ## Prerequisites (CI namespace)
 

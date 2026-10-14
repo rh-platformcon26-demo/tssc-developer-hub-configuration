@@ -217,7 +217,7 @@ spec:
 
           1. Argo CD syncs the PaC `Repository` + webhook Job into **tssc-app-ci**
           2. The Job registers the GitLab webhook and pushes a dummy commit
-          3. PaC creates PipelineRun from `.tekton/on-push.yaml` (remote pipeline/task)
+          3. PaC creates PipelineRun from `.tekton/` (local Pipeline + Task)
 
           Prerequisites in **tssc-app-ci**:
           - Secret `${{ parameters.awsSecret }}` (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
