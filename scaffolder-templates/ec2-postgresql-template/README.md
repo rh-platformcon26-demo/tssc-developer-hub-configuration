@@ -55,6 +55,16 @@ Entities use:
 - `janus-idp.io/tekton: <name>`
 - `backstage.io/kubernetes-id: <name>`
 
+After a successful provision, the pipeline updates the compute Resource
+`${name}-ec2` in `catalog-info.yaml` with:
+
+- `amazon.com/ec2-public-ip`
+- `amazon.com/ec2-private-ip`
+- `amazon.com/ec2-instance-id`
+- SSH / AWS console links
+
+That commit uses `[skip ci]` so PaC does not re-run the pipeline.
+
 ## Cluster prerequisites
 
 In **tssc-app-ci**:
