@@ -22,13 +22,13 @@ spec:
   parameters:
     - title: Instance
       required:
-        - name
+        - instanceName
         - vpcId
         - subnetId
         - keyName
         - repoOwner
       properties:
-        name:
+        instanceName:
           title: Name
           type: string
           description: Unique name (EC2 Name tag, GitLab repos, catalog entities)
@@ -108,11 +108,11 @@ spec:
       input:
         url: ./skeleton
         values:
-          name: ${{ parameters.name }}
+          name: ${{ parameters.instanceName }}
           namespace: tssc-app
           owner: user:default/${{ user.entity.metadata.name }}
           gitlabHost: gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}
-          destination: ${{ parameters.repoOwner }}/${{ parameters.name }}
+          destination: ${{ parameters.repoOwner }}/${{ parameters.instanceName }}
           vpcId: ${{ parameters.vpcId }}
           subnetId: ${{ parameters.subnetId }}
           keyName: ${{ parameters.keyName }}
@@ -131,7 +131,7 @@ spec:
       name: Publish Source Repository
       action: publish:gitlab
       input:
-        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.name }}'
+        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.instanceName }}'
         defaultBranch: master
         repoVisibility: public
 
@@ -142,13 +142,13 @@ spec:
         url: ./gitops-template
         targetPath: gitops
         values:
-          name: ${{ parameters.name }}
-          appName: ${{ parameters.name }}-gitops
-          description: GitOps / Pipelines-as-Code wiring for ${{ parameters.name }}
+          name: ${{ parameters.instanceName }}
+          appName: ${{ parameters.instanceName }}-gitops
+          description: GitOps / Pipelines-as-Code wiring for ${{ parameters.instanceName }}
           namespace: tssc-app
-          repoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.name }}-gitops'
-          srcRepoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.name }}'
-          argoComponentOverlays: './components/${{ parameters.name }}/overlays'
+          repoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}-gitops'
+          srcRepoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}'
+          argoComponentOverlays: './components/${{ parameters.instanceName }}/overlays'
           owner: user:default/${{ user.entity.metadata.name }}
           argoNS: tssc-gitops
           argoProject: default
@@ -162,7 +162,7 @@ spec:
       input:
         files:
           - from: gitops/components/infra
-            to: gitops/components/${{ parameters.name }}
+            to: gitops/components/${{ parameters.instanceName }}
             overwrite: true
 
     - id: publish-gitlab-gitops
@@ -170,7 +170,7 @@ spec:
       action: publish:gitlab
       input:
         sourcePath: gitops
-        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.name }}-gitops'
+        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.instanceName }}-gitops'
         defaultBranch: master
         repoVisibility: public
 
@@ -178,10 +178,10 @@ spec:
       name: Create Argo CD Resources
       action: argocd:create-resources
       input:
-        appName: ${{ parameters.name }}-app-of-apps
+        appName: ${{ parameters.instanceName }}-app-of-apps
         argoInstance: default
         namespace: tssc-gitops
-        repoUrl: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.name }}-gitops.git
+        repoUrl: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}-gitops.git
         path: './app-of-apps'
 
     - id: register-source
@@ -226,8 +226,8 @@ spec:
 
           Watch progress:
           ```
-          oc get repository,job,pipelinerun -n tssc-app-ci -l janus-idp.io/tekton=${{ parameters.name }}
-          oc get application -n tssc-gitops ${{ parameters.name }}-ci
+          oc get repository,job,pipelinerun -n tssc-app-ci -l janus-idp.io/tekton=${{ parameters.instanceName }}
+          oc get application -n tssc-gitops ${{ parameters.instanceName }}-ci
           ```
 
           After success, SSH-tunnel to PostgreSQL:
