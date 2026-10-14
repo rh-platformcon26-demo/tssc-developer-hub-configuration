@@ -13,7 +13,7 @@ metadata:
     gitlab.com/project-slug: ${{ values.destination }}
 spec:
   owner: ${{ values.owner }}
-  lifecycle: experimental
+  lifecycle: development
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
@@ -31,7 +31,7 @@ metadata:
 spec:
   type: service
   owner: ${{ values.owner }}
-  lifecycle: experimental
+  lifecycle: development
   system: ${{ values.name }}
 ---
 apiVersion: backstage.io/v1alpha1
@@ -50,7 +50,7 @@ metadata:
 spec:
   type: compute
   owner: ${{ values.owner }}
-  lifecycle: experimental
+  lifecycle: development
   system: ${{ values.name }}
 ---
 apiVersion: backstage.io/v1alpha1
@@ -67,7 +67,7 @@ metadata:
 spec:
   type: database
   owner: ${{ values.owner }}
-  lifecycle: experimental
+  lifecycle: development
   system: ${{ values.name }}
   dependsOn:
     - resource:default/${{ values.name }}-ec2

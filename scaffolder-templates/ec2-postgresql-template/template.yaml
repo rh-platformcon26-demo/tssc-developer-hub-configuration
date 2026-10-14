@@ -2,12 +2,10 @@ apiVersion: scaffolder.backstage.io/v1beta3
 kind: Template
 metadata:
   name: ec2-postgresql-template
-  title: Provision AWS EC2 with PostgreSQL (Ansible + Tekton)
+  title: Provision AWS EC2 with PostgreSQL
   description: >
-    Create a source repository with Pipelines-as-Code and a GitOps repository
-    that wires the PaC Repository + GitLab webhook. A push to master runs the
-    ec2-postgresql Tekton pipeline (Ansible) to provision a Fedora EC2 instance
-    with PostgreSQL (localhost only, access via SSH tunnel).
+    Launch a Linux EC2 on AWS and install PostgreSQL via a CI pipeline.
+    Access the database with an SSH tunnel (localhost only).
   tags:
     - aws
     - ansible
