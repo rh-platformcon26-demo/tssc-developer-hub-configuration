@@ -1,14 +1,18 @@
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  name: ec2-postgresql-${{ values.instanceName }}
+  name: ec2-postgresql-provision
+  annotations:
+    pipelinesascode.tekton.dev/on-cel-expression: |
+      body.object_kind == "push" && body.ref == "refs/heads/master"
+    pipelinesascode.tekton.dev/pipeline: "https://${{ values.gitlabHost }}/rhdh/tssc-sample-pipelines/-/raw/main/pipelines/ec2-postgresql.yaml"
+    pipelinesascode.tekton.dev/task-0: "https://${{ values.gitlabHost }}/rhdh/tssc-sample-pipelines/-/raw/main/tasks/ansible-ec2-postgresql.yaml"
   labels:
+    backstage.io/kubernetes-id: "${{ values.name }}"
+    janus-idp.io/tekton: "${{ values.name }}"
     app.kubernetes.io/part-of: platformcon-wescale
-    ec2-postgresql/instance: ${{ values.instanceName }}
-    tssc/gitops: ${{ values.instanceName }}
+    ec2-postgresql/instance: "${{ values.name }}"
 spec:
-  pipelineRef:
-    name: ec2-postgresql
   params:
     - name: ANSIBLE_GIT_URL
       value: "${{ values.ansibleGitUrl }}"
@@ -23,7 +27,7 @@ spec:
     - name: KEY_NAME
       value: "${{ values.keyName }}"
     - name: INSTANCE_NAME
-      value: "${{ values.instanceName }}"
+      value: "${{ values.name }}"
     - name: INSTANCE_TYPE
       value: "${{ values.instanceType }}"
     - name: SSH_INGRESS_CIDR
@@ -38,3 +42,5 @@ spec:
       value: "${{ values.awsSecret }}"
     - name: SSH_SECRET
       value: "${{ values.sshSecret }}"
+  pipelineRef:
+    name: ec2-postgresql

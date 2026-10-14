@@ -4,10 +4,10 @@ metadata:
   name: ec2-postgresql-template
   title: Provision AWS EC2 with PostgreSQL (Ansible + Tekton)
   description: >
-    Publish a GitOps repository and create an Argo CD Application that syncs a
-    Tekton PipelineRun. The pipeline clones the ansible repository and runs
-    ec2-postgresql to provision a Fedora EC2 instance with PostgreSQL
-    (localhost only, access via SSH tunnel).
+    Create a source repository with Pipelines-as-Code and a GitOps repository
+    that wires the PaC Repository + GitLab webhook. A push to master runs the
+    ec2-postgresql Tekton pipeline (Ansible) to provision a Fedora EC2 instance
+    with PostgreSQL (localhost only, access via SSH tunnel).
   tags:
     - aws
     - ansible
@@ -22,21 +22,20 @@ spec:
   parameters:
     - title: Instance
       required:
-        - instanceName
+        - name
         - vpcId
         - subnetId
         - keyName
-        - namespace
         - repoOwner
       properties:
-        instanceName:
-          title: Instance Name
+        name:
+          title: Name
           type: string
-          description: EC2 Name tag and Ansible instance_name (also used in GitLab repo name)
+          description: Unique name (EC2 Name tag, GitLab repos, catalog entities)
           default: ansible-fedora-postgres
+          ui:field: EntityNamePicker
           ui:autofocus: true
           maxLength: 48
-          pattern: '^[a-z]([a-z0-9-]*[a-z0-9])?$'
         vpcId:
           title: VPC ID
           type: string
@@ -49,15 +48,10 @@ spec:
           title: EC2 Key Pair Name
           type: string
           description: Existing EC2 key pair name (must match SSH secret)
-        namespace:
-          title: CI Namespace
-          type: string
-          description: Namespace where Argo syncs the PipelineRun (Secrets must exist here)
-          default: tssc-app-ci
         repoOwner:
           title: GitLab Repo Owner
           type: string
-          description: GitLab group/user that will own the GitOps repository
+          description: GitLab group/user that will own the source and GitOps repositories
           default: development
         postgresPassword:
           title: PostgreSQL Password
@@ -89,12 +83,12 @@ spec:
         awsSecret:
           title: AWS Credentials Secret
           type: string
-          description: Secret with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+          description: Secret with AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (in tssc-app-ci)
           default: aws-credentials
         sshSecret:
           title: SSH Key Secret
           type: string
-          description: Secret with key ssh-privatekey (PEM)
+          description: Secret with key ssh-privatekey (PEM) (in tssc-app-ci)
           default: ec2-ssh-key
         ansibleGitRevision:
           title: Ansible Git Revision
@@ -108,14 +102,17 @@ spec:
       input:
         entityRef: component:default/provisioning-data
 
-    - id: fetch-gitops-skeleton
-      name: Generate GitOps Manifests
+    - id: template
+      name: Fetch Skeleton + Template
       action: fetch:template
       input:
-        url: ./gitops-template
+        url: ./skeleton
         values:
-          instanceName: ${{ parameters.instanceName }}
-          namespace: ${{ parameters.namespace }}
+          name: ${{ parameters.name }}
+          namespace: tssc-app
+          owner: user:default/${{ user.entity.metadata.name }}
+          gitlabHost: gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}
+          destination: ${{ parameters.repoOwner }}/${{ parameters.name }}
           vpcId: ${{ parameters.vpcId }}
           subnetId: ${{ parameters.subnetId }}
           keyName: ${{ parameters.keyName }}
@@ -129,17 +126,51 @@ spec:
           sshSecret: ${{ parameters.sshSecret }}
           ansibleGitRevision: ${{ parameters.ansibleGitRevision }}
           ansibleGitUrl: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/rhdh/ansible.git'
-          repoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}-ec2-pg-gitops'
+
+    - id: publish-gitlab-source
+      name: Publish Source Repository
+      action: publish:gitlab
+      input:
+        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.name }}'
+        defaultBranch: master
+        repoVisibility: public
+
+    - id: fetch-gitops-skeleton
+      name: Fetch GitOps Skeleton
+      action: fetch:template
+      input:
+        url: ./gitops-template
+        targetPath: gitops
+        values:
+          name: ${{ parameters.name }}
+          appName: ${{ parameters.name }}-gitops
+          description: GitOps / Pipelines-as-Code wiring for ${{ parameters.name }}
+          namespace: tssc-app
+          repoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.name }}-gitops'
+          srcRepoURL: 'https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.name }}'
+          argoComponentOverlays: './components/${{ parameters.name }}/overlays'
+          owner: user:default/${{ user.entity.metadata.name }}
           argoNS: tssc-gitops
           argoProject: default
+          gitlabHost: gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}
+          gitWebhookSecret: openshift
           defaultBranch: master
-          owner: user:default/${{ user.entity.metadata.name }}
+
+    - action: fs:rename
+      id: renameComponentDir
+      name: Rename Component Directory
+      input:
+        files:
+          - from: gitops/components/infra
+            to: gitops/components/${{ parameters.name }}
+            overwrite: true
 
     - id: publish-gitlab-gitops
       name: Publish GitOps Repository to GitLab
       action: publish:gitlab
       input:
-        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.instanceName }}-ec2-pg-gitops'
+        sourcePath: gitops
+        repoUrl: 'gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}?owner=${{ parameters.repoOwner }}&repo=${{ parameters.name }}-gitops'
         defaultBranch: master
         repoVisibility: public
 
@@ -147,14 +178,21 @@ spec:
       name: Create Argo CD Resources
       action: argocd:create-resources
       input:
-        appName: ${{ parameters.instanceName }}-ec2-pg-app-of-apps
+        appName: ${{ parameters.name }}-app-of-apps
         argoInstance: default
         namespace: tssc-gitops
-        repoUrl: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.instanceName }}-ec2-pg-gitops.git
+        repoUrl: https://gitlab-gitlab.${{ steps["fetch-provision-data"].output.entity.metadata.labels["ocp-apps-domain"] }}/${{ parameters.repoOwner }}/${{ parameters.name }}-gitops.git
         path: './app-of-apps'
 
+    - id: register-source
+      name: Register Source
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['publish-gitlab-source'].output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
     - id: register-gitops
-      name: Register GitOps in Catalog
+      name: Register GitOps
       action: catalog:register
       input:
         repoContentsUrl: ${{ steps['publish-gitlab-gitops'].output.repoContentsUrl }}
@@ -162,26 +200,34 @@ spec:
 
   output:
     links:
+      - title: Source Repository
+        url: ${{ steps['publish-gitlab-source'].output.remoteUrl }}
       - title: GitOps Repository
         url: ${{ steps['publish-gitlab-gitops'].output.remoteUrl }}
+      - title: Open Component in catalog
+        icon: catalog
+        entityRef: ${{ steps['register-source'].output.entityRef }}
       - title: Open GitOps Resource in catalog
         icon: catalog
         entityRef: ${{ steps['register-gitops'].output.entityRef }}
     text:
       - title: Next steps
         content: |
-          Argo CD will sync PipelineRun `ec2-postgresql-${{ parameters.instanceName }}`
-          into namespace **${{ parameters.namespace }}**.
+          Same flow as other TSSC templates (Pipelines-as-Code):
 
-          Prerequisites in that namespace:
-          - Secret `${{ parameters.awsSecret }}` with keys `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
-          - Secret `${{ parameters.sshSecret }}` with key `ssh-privatekey`
-          - Pipeline `ec2-postgresql` and Task `ansible-ec2-postgresql` installed
+          1. Argo CD syncs the PaC `Repository` + webhook Job into **tssc-app-ci**
+          2. The Job registers the GitLab webhook and pushes a dummy commit
+          3. PaC creates PipelineRun from `.tekton/on-push.yaml` (remote pipeline/task)
+
+          Prerequisites in **tssc-app-ci**:
+          - Secret `${{ parameters.awsSecret }}` (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+          - Secret `${{ parameters.sshSecret }}` (`ssh-privatekey`)
+          - Secret `gitlab-auth-secret` (already present in TSSC labs)
 
           Watch progress:
           ```
-          oc get pipelinerun -n ${{ parameters.namespace }} ec2-postgresql-${{ parameters.instanceName }}
-          oc get application -n tssc-gitops ${{ parameters.instanceName }}-ec2-pg
+          oc get repository,job,pipelinerun -n tssc-app-ci -l janus-idp.io/tekton=${{ parameters.name }}
+          oc get application -n tssc-gitops ${{ parameters.name }}-ci
           ```
 
           After success, SSH-tunnel to PostgreSQL:

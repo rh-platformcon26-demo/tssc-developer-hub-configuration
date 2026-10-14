@@ -1,7 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 commonLabels:
-  tssc/gitops: ${{ values.instanceName }}
-  app.kubernetes.io/part-of: platformcon-wescale
+  tssc/gitops: ${{ values.name }}
+  janus-idp.io/tekton: ${{ values.name }}
+  backstage.io/kubernetes-id: ${{ values.name }}
+  app.kubernetes.io/part-of: ${{ values.name }}
 resources:
-  - application.yaml
+  - ci-tekton.yaml

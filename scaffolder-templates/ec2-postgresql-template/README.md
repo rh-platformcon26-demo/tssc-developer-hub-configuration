@@ -1,40 +1,58 @@
-# EC2 PostgreSQL template (GitOps)
+# EC2 PostgreSQL template (Pipelines-as-Code)
 
-RHDH software template that **publishes a GitOps repository** and creates an
-**Argo CD Application**. Argo syncs a Tekton `PipelineRun` into the CI namespace;
-the pipeline clones [`ansible/ec2-postgresql`](../../../ansible/ec2-postgresql)
-and provisions a Fedora EC2 instance with PostgreSQL.
+Same pattern as the Quarkus TSSC template:
+
+1. **Source repo** with `.tekton/on-push.yaml` (PaC PipelineRun)
+2. **GitOps repo** with PaC `Repository` + GitLab webhook Job
+3. **Argo CD** app-of-apps syncs only the CI overlay into `tssc-app-ci`
 
 ## Flow
 
-1. User fills VPC, subnet, key pair, instance name, and DB password in RHDH.
-2. Scaffolder renders `gitops-template/` and publishes it to GitLab
-   (`${repoOwner}/${instanceName}-ec2-pg-gitops`).
-3. `argocd:create-resources` creates an app-of-apps Application in `tssc-gitops`.
-4. That Application syncs `./manifests` (the PipelineRun) into the CI namespace.
-5. Tekton runs pipeline `ec2-postgresql`.
+1. User fills VPC, subnet, key pair, name, and DB password in RHDH.
+2. Scaffolder publishes:
+   - `${repoOwner}/${name}` — source + `.tekton/on-push.yaml` + catalog
+   - `${repoOwner}/${name}-gitops` — Repository CR, webhook Job, app-of-apps
+3. Argo CD syncs into `tssc-app-ci`:
+   - `Repository` pointing at the source repo
+   - Job that creates the GitLab push webhook and a dummy commit
+4. Pipelines-as-Code fetches remote `ec2-postgresql` pipeline +
+   `ansible-ec2-postgresql` task from `tssc-sample-pipelines` and runs them.
 
-## Repository layout (published)
+## Repository layout
+
+**Source**
 
 ```
-catalog-info.yaml
+.tekton/on-push.yaml
+catalog-info.yaml          # System, Component, EC2 + DB Resources
+README.md
+```
+
+**GitOps**
+
+```
+catalog-info.yaml          # gitops Resource
 app-of-apps/
-  application.yaml      # Argo Application → CI namespace
+  ci-tekton.yaml
   kustomization.yaml
-manifests/
-  pipelinerun.yaml      # fixed-name PipelineRun
+components/<name>/overlays/ci/
+  source-repository.yaml
+  secret-gitlab-webhook.yaml
+  cm-create-webhook.yaml
+  job-create-webhook.yaml
   kustomization.yaml
 ```
+
+## Catalog / RHDH visibility
+
+Entities use:
+
+- `janus-idp.io/tekton: <name>`
+- `backstage.io/kubernetes-id: <name>`
 
 ## Cluster prerequisites
 
-In the CI namespace (default `tssc-app-ci`):
-
-1. Install Pipeline + Task from `tssc-sample-pipelines`:
-   - `pipelines/ec2-postgresql.yaml`
-   - `tasks/ansible-ec2-postgresql.yaml`
-
-2. Create Secrets:
+In **tssc-app-ci**:
 
 ```bash
 oc -n tssc-app-ci create secret generic aws-credentials \
@@ -45,21 +63,15 @@ oc -n tssc-app-ci create secret generic ec2-ssh-key \
   --from-file=ssh-privatekey=~/.ssh/my-keypair.pem
 ```
 
-## Ansible repository
-
-Default Git URL (from `provisioning-data` labels):
-
-`https://gitlab-gitlab.<ocp-apps-domain>/rhdh/ansible.git`
-
-The playbook path inside that repo must be `ec2-postgresql/`.
+`gitlab-auth-secret` is expected to already exist (TSSC lab default).
 
 ## After the run
 
 ```bash
-oc get pipelinerun -n tssc-app-ci ec2-postgresql-<instanceName>
+oc get repository,job,pipelinerun -n tssc-app-ci -l janus-idp.io/tekton=<name>
 ```
 
-PostgreSQL listens on **localhost only**. Use an SSH tunnel:
+PostgreSQL listens on **localhost only**. SSH tunnel:
 
 ```bash
 ssh -i my-keypair.pem -L 5432:127.0.0.1:5432 fedora@<ec2_public_ip>

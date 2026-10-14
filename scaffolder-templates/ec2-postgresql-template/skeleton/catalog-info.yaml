@@ -1,0 +1,73 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: ${{ values.name }}
+  description: AWS EC2 + PostgreSQL stack provisioned for ${{ values.name }}
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    backstage.io/kubernetes-id: ${{ values.name }}
+    janus-idp.io/tekton: ${{ values.name }}
+    argocd/app-selector: tssc/gitops=${{ values.name }}
+    backstage.io/source-location: url:https://${{ values.gitlabHost }}/${{ values.destination }}
+    gitlab.com/project-slug: ${{ values.destination }}
+spec:
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.name }}
+  description: Provisioning definition and Pipelines-as-Code triggers for ${{ values.name }}
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    backstage.io/kubernetes-id: ${{ values.name }}
+    janus-idp.io/tekton: ${{ values.name }}
+    argocd/app-selector: tssc/gitops=${{ values.name }}
+    backstage.io/source-location: url:https://${{ values.gitlabHost }}/${{ values.destination }}
+    gitlab.com/project-slug: ${{ values.destination }}
+spec:
+  type: service
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+  system: ${{ values.name }}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.name }}-ec2
+  description: Fedora EC2 instance ${{ values.name }} (${{ values.instanceType }}) in ${{ values.awsRegion }}
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    amazon.com/account-region: ${{ values.awsRegion }}
+    amazon.com/ec2-instance-type: ${{ values.instanceType }}
+    amazon.com/vpc-id: ${{ values.vpcId }}
+    amazon.com/subnet-id: ${{ values.subnetId }}
+    amazon.com/key-name: ${{ values.keyName }}
+spec:
+  type: compute
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+  system: ${{ values.name }}
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ${{ values.name }}-db
+  description: PostgreSQL database ${{ values.postgresDb }} on ${{ values.name }} (localhost only)
+  labels:
+    app.kubernetes.io/part-of: platformcon-wescale
+  annotations:
+    database/engine: postgresql
+    database/name: ${{ values.postgresDb }}
+    database/user: ${{ values.postgresUser }}
+spec:
+  type: database
+  owner: ${{ values.owner }}
+  lifecycle: experimental
+  system: ${{ values.name }}
+  dependsOn:
+    - resource:default/${{ values.name }}-ec2
