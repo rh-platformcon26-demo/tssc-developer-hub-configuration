@@ -32,7 +32,7 @@ spec:
           title: Name
           type: string
           description: Unique name (EC2 Name tag, GitLab repos, catalog entities)
-          default: fedora-postgres
+          default: ec2-postgres
           ui:field: EntityNamePicker
           ui:autofocus: true
           maxLength: 48
