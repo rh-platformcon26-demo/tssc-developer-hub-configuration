@@ -38,10 +38,12 @@ spec:
           title: VPC ID
           type: string
           description: Existing AWS VPC (e.g. vpc-xxxxxxxx)
+          default: vpc-00ef4e159a361a2ff
         subnetId:
           title: Subnet ID
           type: string
           description: Existing subnet ID (e.g. subnet-0abc...), not the Name tag
+          default: subnet-04ab6e2c9b6617923
         keyName:
           title: EC2 Key Pair Name
           type: string
